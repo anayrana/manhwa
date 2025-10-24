@@ -34,12 +34,12 @@ async function getSheetData() {
 // STEP 2: Upload to Meilisearch
 // -----------------
 async function uploadToMeili(data) {
-  // 2a. Create index if not exists
-  let indexResponse = await fetch(`${MEILISEARCH_HOST}/indexes/manhwa`, {
+  // 1️⃣ Create index safely
+  const createIndex = await fetch(`${MEILISEARCH_HOST}/indexes`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${MEILISEARCH_MASTER_KEY}`,
+      "X-Meili-API-Key": MEILISEARCH_MASTER_KEY,
     },
     body: JSON.stringify({
       uid: "manhwa",
@@ -47,21 +47,20 @@ async function uploadToMeili(data) {
     }),
   });
 
-  if (!indexResponse.ok && indexResponse.status !== 409) {
-    console.error("❌ Failed to create index:", await indexResponse.text());
-    return;
-  } else if (indexResponse.status === 409) {
+  if (!createIndex.ok && createIndex.status !== 409) {
+    console.error("❌ Failed to create index:", await createIndex.text());
+  } else if (createIndex.status === 409) {
     console.log("ℹ️ Index already exists, continuing...");
   } else {
-    console.log("✅ Index created successfully");
+    console.log("✅ Index created successfully!");
   }
 
-  // 2b. Upload documents
+  // 2️⃣ Upload documents
   const uploadResponse = await fetch(`${MEILISEARCH_HOST}/indexes/manhwa/documents`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${MEILISEARCH_MASTER_KEY}`,
+      "X-Meili-API-Key": MEILISEARCH_MASTER_KEY,
     },
     body: JSON.stringify(data),
   });
@@ -71,25 +70,35 @@ async function uploadToMeili(data) {
     return;
   }
 
-  console.log(`✅ Successfully uploaded ${data.length} documents`);
+  console.log(`✅ Uploaded ${data.length} documents`);
 
-  // 2c. Set searchable and displayed attributes
+  // 3️⃣ Update searchable + displayed attributes
   const settingsResponse = await fetch(`${MEILISEARCH_HOST}/indexes/manhwa/settings`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${MEILISEARCH_MASTER_KEY}`,
+      "X-Meili-API-Key": MEILISEARCH_MASTER_KEY,
     },
     body: JSON.stringify({
       searchableAttributes: ["title", "status", "genre", "description", "tags"],
-      displayedAttributes: ["id", "title", "cover_image", "status", "chapters", "genre", "description", "official_site", "tags"],
+      displayedAttributes: [
+        "id",
+        "title",
+        "cover_image",
+        "status",
+        "chapters",
+        "genre",
+        "description",
+        "official_site",
+        "tags",
+      ],
     }),
   });
 
   if (!settingsResponse.ok) {
-    console.error("❌ Failed to update index settings:", await settingsResponse.text());
+    console.error("❌ Failed to update settings:", await settingsResponse.text());
   } else {
-    console.log("⚙️ Index settings updated successfully!");
+    console.log("⚙️ Settings updated successfully!");
   }
 }
 
