@@ -14,10 +14,8 @@ async function getSheetData() {
   const res = await fetch(SHEET_URL);
   if (!res.ok) throw new Error("Failed to fetch Google Sheet CSV");
   const text = await res.text();
-
   const rows = text.split("\n").map(r => r.split(","));
   const headers = rows.shift().map(h => h.trim());
-
   const data = rows
     .map(row => {
       let obj = {};
@@ -25,7 +23,6 @@ async function getSheetData() {
       return obj;
     })
     .filter(item => item.id && item.title); // only valid entries
-
   console.log(`📄 Fetched ${data.length} rows from Google Sheet`);
   return data;
 }
@@ -39,16 +36,18 @@ async function uploadToMeili(data) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Meili-API-Key": MEILISEARCH_MASTER_KEY,
+      "Authorization": `Bearer ${MEILISEARCH_MASTER_KEY}`, // ✅ CHANGED
     },
     body: JSON.stringify({
       uid: "manhwa",
       primaryKey: "id",
     }),
   });
-
+  
   if (!createIndex.ok && createIndex.status !== 409) {
-    console.error("❌ Failed to create index:", await createIndex.text());
+    const errorText = await createIndex.text();
+    console.error("❌ Failed to create index:", errorText);
+    throw new Error(errorText);
   } else if (createIndex.status === 409) {
     console.log("ℹ️ Index already exists, continuing...");
   } else {
@@ -60,24 +59,26 @@ async function uploadToMeili(data) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Meili-API-Key": MEILISEARCH_MASTER_KEY,
+      "Authorization": `Bearer ${MEILISEARCH_MASTER_KEY}`, // ✅ CHANGED
     },
     body: JSON.stringify(data),
   });
-
+  
   if (!uploadResponse.ok) {
-    console.error("❌ Upload failed:", await uploadResponse.text());
-    return;
+    const errorText = await uploadResponse.text();
+    console.error("❌ Upload failed:", errorText);
+    throw new Error(errorText);
   }
-
-  console.log(`✅ Uploaded ${data.length} documents`);
+  
+  const uploadResult = await uploadResponse.json();
+  console.log(`✅ Uploaded ${data.length} documents. Task UID:`, uploadResult.taskUid);
 
   // 3️⃣ Update searchable + displayed attributes
   const settingsResponse = await fetch(`${MEILISEARCH_HOST}/indexes/manhwa/settings`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
-      "X-Meili-API-Key": MEILISEARCH_MASTER_KEY,
+      "Authorization": `Bearer ${MEILISEARCH_MASTER_KEY}`, // ✅ CHANGED
     },
     body: JSON.stringify({
       searchableAttributes: ["title", "status", "genre", "description", "tags"],
@@ -94,9 +95,10 @@ async function uploadToMeili(data) {
       ],
     }),
   });
-
+  
   if (!settingsResponse.ok) {
-    console.error("❌ Failed to update settings:", await settingsResponse.text());
+    const errorText = await settingsResponse.text();
+    console.error("❌ Failed to update settings:", errorText);
   } else {
     console.log("⚙️ Settings updated successfully!");
   }
@@ -112,6 +114,7 @@ async function uploadToMeili(data) {
     await uploadToMeili(data);
     console.log("🎉 All done!");
   } catch (err) {
-    console.error("❌ Error:", err);
+    console.error("❌ Error:", err.message);
+    process.exit(1);
   }
 })();
